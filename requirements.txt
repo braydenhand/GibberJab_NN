@@ -2,3 +2,6 @@ langchain
 langgraph
 openai
 tiktoken
+langchain_community
+toml
+langchain_openai
