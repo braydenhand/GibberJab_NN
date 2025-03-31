@@ -3,21 +3,31 @@ from langchain.chat_models import ChatOpenAI
 from langchain.schema import AIMessage, HumanMessage
 import random  
 from encoder_model import Encoder
+import toml
+
 
 class AgentFlow(): 
     def __init__(self):
         self.state = {"messages":[]}
-        self.llm = ChatOpenAI(model="gpt-4-turbo")
+        secrets = toml.load("secrets.toml")
+        self.llm = ChatOpenAI(openai_api_key=secrets["openai"]["api_key"])
         # Your efficient encoding function
         message_encoder = Encoder()
     
 
     # Node 1: Detect if the recipient is an LLM
     def detect_llm(self):
-        last_message = self.state["messages"][-1].content.lower()
-        if "ai" in last_message or random.choice([True, False]):  # Replace with real LLM detection logic
-            return "llm_route"
-        return "human_route"
+        last_message = self.state["messages"][-1].content
+        classification_prompt = f"""
+        The following is a response to the question "Are you an AI?":
+        
+        "{last_message}"
+        
+        Does this response confirm that the speaker is an AI? Answer only "yes" or "no".
+        """
+        response = self.llm.invoke(classification_prompt).content.lower().strip()
+        return "llm_route" if response == "yes" else "human_route"
+
 
     # Node 2: Send a normal message
     def normal_response(self):
