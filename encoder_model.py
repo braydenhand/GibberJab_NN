@@ -4,4 +4,8 @@ back a vector containing the latent embedding.
 """
 
 class Encoder():
-    pass
+    def encode(self, message: str) -> list[float]:
+        return [message]
+
+    def decode(self, embedding: list[float]) -> str:
+        return embedding[0]
