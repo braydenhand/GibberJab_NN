@@ -1,0 +1,4 @@
+__pycache__/
+checkpoints/
+enhanced_neural_codec/
+pytorch_neural_codec/
