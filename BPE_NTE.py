@@ -266,13 +266,14 @@ class EnhancedEncoder(nn.Module):
 class EnhancedVectorQuantizer(nn.Module):
     """Enhanced Vector Quantization layer with commitment loss and EMA updates"""
     
-    def __init__(self, latent_dim, num_embeddings=16, commitment_cost=0.25, decay=0.99):
+    def __init__(self, latent_dim, num_embeddings=16, commitment_cost=0.25, decay=0.99, device="cpu"):
         super(EnhancedVectorQuantizer, self).__init__()
         
         self.latent_dim = latent_dim
         self.num_embeddings = num_embeddings
         self.commitment_cost = commitment_cost
         self.decay = decay
+        self.device = device
         
         # Initialize codebook for each dimension
         self.codebooks = nn.ModuleList([
@@ -281,12 +282,12 @@ class EnhancedVectorQuantizer(nn.Module):
         
         # Initialize each codebook with uniformly spaced values
         for codebook in self.codebooks:
-            values = torch.linspace(-1.5, 1.5, num_embeddings).unsqueeze(1)
+            values = torch.linspace(-1.5, 1.5, num_embeddings, device=device).unsqueeze(1)
             codebook.weight.data.copy_(values)
             
         # Register buffers for EMA updates
-        self.register_buffer('_ema_cluster_size', torch.zeros(latent_dim, num_embeddings))
-        self.register_buffer('_ema_w', torch.zeros(latent_dim, num_embeddings, 1))
+        self.register_buffer('_ema_cluster_size', torch.zeros(latent_dim, num_embeddings, device=device))
+        self.register_buffer('_ema_w', torch.zeros(latent_dim, num_embeddings, 1, device=device))
         
         # Initialize the embeddings with uniform samples from N(-1, 1)
         for i, codebook in enumerate(self.codebooks):
@@ -298,7 +299,7 @@ class EnhancedVectorQuantizer(nn.Module):
         
         # Quantize each dimension separately
         z_q = torch.zeros_like(z)
-        indices = torch.zeros(batch_size, self.latent_dim, dtype=torch.long, device=z.device)
+        indices = torch.zeros(batch_size, self.latent_dim, dtype=torch.long, device=self.device)
         
         # Compute the latent loss across all dimensions
         commitment_loss = 0.0
@@ -312,7 +313,7 @@ class EnhancedVectorQuantizer(nn.Module):
             distances = torch.sum((z_dim.unsqueeze(1) - codebook.weight) ** 2, dim=2)
             
             # Get closest codebook entry
-            min_encodings = torch.zeros(batch_size, self.num_embeddings, device=z.device)
+            min_encodings = torch.zeros(batch_size, self.num_embeddings, device=self.device)
             min_encoding_indices = torch.argmin(distances, dim=1)
             indices[:, i] = min_encoding_indices
             
@@ -332,7 +333,7 @@ class EnhancedVectorQuantizer(nn.Module):
                     self._ema_cluster_size[i] = self._ema_cluster_size[i] * self.decay + (1 - self.decay) * n
                     
                     # Laplace smoothing
-                    n_clipped = torch.max(n, torch.tensor(0.1, device=n.device))
+                    n_clipped = torch.max(n, torch.tensor(0.1, device=self.device))
                     
                     # Embed sum
                     embed_sum = torch.matmul(min_encodings.t(), z_dim)
@@ -437,7 +438,7 @@ class EnhancedNeuralTextCodec(nn.Module):
         self.quantize = quantize
         if quantize:
             self.vector_quantizer = EnhancedVectorQuantizer(
-                latent_dim, num_embeddings=codebook_size, commitment_cost=0.25
+                latent_dim, num_embeddings=codebook_size, commitment_cost=0.25, device=device
             )
         else:
             self.vector_quantizer = None
@@ -934,6 +935,13 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
         
         # Load model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"\n=== Device Information ===")
+        print(f"Using device: {device}")
+        if device.type == 'cuda':
+            print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+        print("=======================\n")
+        
         model = EnhancedNeuralTextCodec.load(output_path, device)
         model.set_tokenizer(tokenizer)
         
@@ -967,7 +975,12 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
     
     # Determine device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\n=== Device Information ===")
     print(f"Using device: {device}")
+    if device.type == 'cuda':
+        print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+    print("=======================\n")
     
     # Train BPE tokenizer
     tokenizer = BPETokenizer(vocab_size=8000)
@@ -1006,6 +1019,7 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
     print(f"Sequence length: {64}")
     print(f"Codebook size: {16}")
     print(f"Training for {epochs} epochs")
+    print(f"Model device: {next(model.parameters()).device}")
     
     # Train the model with validation
     model.train_model(
@@ -1144,8 +1158,16 @@ if __name__ == "__main__":
         
         # Load model
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"\n=== Device Information ===")
+        print(f"Using device: {device}")
+        if device.type == 'cuda':
+            print(f"GPU Name: {torch.cuda.get_device_name(0)}")
+            print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+        print("=======================\n")
+        
         model = EnhancedNeuralTextCodec.load(model_path, device)
         model.set_tokenizer(tokenizer)
+        print(f"Loaded model device: {next(model.parameters()).device}")
     
     # Example messages of different lengths
     short_message = "The quick brown fox jumps over the lazy dog."
