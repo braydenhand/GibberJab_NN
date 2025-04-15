@@ -648,7 +648,7 @@ class EnhancedNeuralTextCodec(nn.Module):
     
     def train_model(self, train_dataset, val_dataset=None, batch_size=64, 
                    epochs=50, learning_rate=5e-4, beta1=0.9, beta2=0.999,
-                   validate_every=5, checkpoint_every=10):
+                   validate_every=5, checkpoint_every=1):
         """Train the model on a dataset with validation"""
         self._step = 0  # Track steps for KL annealing
         
@@ -709,7 +709,7 @@ class EnhancedNeuralTextCodec(nn.Module):
                 total_kl_loss += kl_loss.item()
                 if vq_loss_val != 0:
                     total_vq_loss += vq_loss_val
-                
+
                 # Update progress bar
                 self._step += 1
                 progress_bar.set_postfix({
@@ -737,17 +737,16 @@ class EnhancedNeuralTextCodec(nn.Module):
             if (epoch + 1) % validate_every == 0 or epoch == epochs - 1:
                 self.validate_on_samples()
             
-            # Save checkpoint
-            if (epoch + 1) % checkpoint_every == 0 or epoch == epochs - 1:
-                checkpoint_path = f"checkpoints/codec_epoch_{epoch+1}.pt"
-                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-                torch.save({
-                    'epoch': epoch + 1,
-                    'model_state_dict': self.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'loss': avg_loss,
-                }, checkpoint_path)
-                print(f"Checkpoint saved to {checkpoint_path}")
+            # Save checkpoint after every epoch
+            checkpoint_path = f"checkpoints/codec_epoch_{epoch+1}.pt"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': self.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_loss,
+            }, checkpoint_path)
+            print(f"Checkpoint saved to {checkpoint_path}")
         
         return self
     
@@ -924,7 +923,7 @@ def create_deep_corpus(output_file="deep_corpus.txt", corpus_size=1000000):
     return output_file, corpus_text
 
 
-def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_codec", epochs=30):
+def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_codec", epochs=30, continue_training=False):
     """Train an enhanced neural codec on a corpus"""
     # Check for existing models
     if os.path.exists(output_path) and os.path.exists(os.path.join(output_path, "tokenizer")):
@@ -938,7 +937,26 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
         model = EnhancedNeuralTextCodec.load(output_path, device)
         model.set_tokenizer(tokenizer)
         
-        return model
+        # If continuing training, load the last checkpoint
+        if continue_training:
+            # Find the latest checkpoint
+            checkpoint_files = [f for f in os.listdir("checkpoints") if f.startswith("codec_epoch_")]
+            if checkpoint_files:
+                latest_checkpoint = max(checkpoint_files, key=lambda x: int(x.split('_')[2].split('.')[0]))
+                checkpoint_path = os.path.join("checkpoints", latest_checkpoint)
+                print(f"Loading checkpoint: {checkpoint_path}")
+                
+                checkpoint = torch.load(checkpoint_path)
+                model.load_state_dict(checkpoint['model_state_dict'])
+                start_epoch = checkpoint['epoch']
+                print(f"Resuming training from epoch {start_epoch}")
+            else:
+                print("No checkpoints found, starting from scratch")
+                start_epoch = 0
+        else:
+            start_epoch = 0
+        
+        return model, start_epoch
     
     # Create or load corpus
     if corpus_path and os.path.exists(corpus_path):
@@ -1009,7 +1027,7 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
     
     print(f"Saved enhanced neural codec to {output_path}")
     
-    return model
+    return model, 0
 
 
 def send_neural_encoded_message(message, codec, protocol_id=6):
@@ -1095,6 +1113,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=3, help='Number of training epochs')
     parser.add_argument('--corpus_size', type=int, default=5000000, help='Size of corpus in characters')
     parser.add_argument('--test_only', action='store_true', help='Skip training and only test the model')
+    parser.add_argument('--continue_training', action='store_true', help='Continue training from the last checkpoint')
     args = parser.parse_args()
     
     # Set model path
@@ -1113,7 +1132,7 @@ if __name__ == "__main__":
             create_deep_corpus(corpus_path, args.corpus_size)
         
         # Train the model
-        model = train_enhanced_neural_codec(corpus_path, model_path, args.epochs)
+        model, start_epoch = train_enhanced_neural_codec(corpus_path, model_path, args.epochs, args.continue_training)
     else:
         # Load existing model
         if not os.path.exists(model_path):
