@@ -1,1 +1,5 @@
-secrets.toml
+__pycache__/
+checkpoints/
+enhanced_neural_codec/
+pytorch_neural_codec/
+ec2.pem
