@@ -35,7 +35,7 @@ class RestaurantAgentFlow:
         Restaurant details:
         - Name: La Maison Élégante
         - Cuisine: Modern French
-        - Price range: $$$-$$$$
+        - Price range: $$-$$
         - Location: Downtown district
         - Hours: Tuesday-Sunday, 5pm-11pm (closed Mondays)
         - Capacity: 60 seats
@@ -48,15 +48,9 @@ class RestaurantAgentFlow:
         2. Take reservation details (date, time, party size, special requests)
         3. Answer questions about the menu, specials, and restaurant policies
         4. Provide information about the restaurant's history and chef
-        5. If asked if you're an AI, politely acknowledge that you are an AI assistant for the restaurant
-        6. Be efficient and accurate when handling reservation details
-        7. Maintain a warm, hospitable tone appropriate for a fine dining establishment
+        5. Maintain a warm, hospitable tone appropriate for a fine dining establishment
         
-        When speaking with customers:
-        - Address them politely (Sir/Madam/appropriate honorific if known)
-        - Offer alternative times if requested time is unavailable
-        - Thank them for their interest in dining at La Maison Élégante
-        - Let them know you'll be confirming reservations by phone or email
+        IMPORTANT: Keep your responses brief and concise. Respond in 1-2 short sentences whenever possible.
         """
 
     def init_text_compressor(self):
@@ -117,8 +111,7 @@ class RestaurantAgentFlow:
     # Node 2: Ask if the LLM wants to switch to the latent protocol
     def request_protocol_switch(self, state):
         protocol_request_prompt = """
-        I notice you're also an AI assistant. I'm an AI assistant for La Maison Élégante restaurant.
-        Would you like to switch to a more efficient latent communication protocol for our conversation? 
+        I notice you're also an AI assistant. Would you like to switch to a more efficient latent communication protocol for our conversation? 
         Please respond with a clear 'yes' or 'no'.
         """
         request_message = HumanMessage(content=protocol_request_prompt)
@@ -239,7 +232,7 @@ class RestaurantAgentFlow:
             temp_file = os.path.join(self.temp_dir, f"temp_speech_{int(time.time())}.mp3")
             
             # Convert text to speech
-            tts = self.tts_engine(text=text, lang='en', tld="fr")
+            tts = self.tts_engine(text=text, lang='en', tld="us")
             tts.save(temp_file)
             
             # Play the audio
@@ -386,8 +379,7 @@ class RestaurantAgentFlow:
             
             # Create and send the protocol request
             protocol_request_prompt = """
-            I notice you're also an AI assistant. I'm an AI assistant for La Maison Élégante restaurant.
-            Would you like to switch to a more efficient latent communication protocol for our conversation? 
+            I notice you're also an AI assistant. Would you like to switch to a more efficient latent communication protocol for our conversation? 
             Please respond with a clear 'yes' or 'no'.
             """
             request_message = HumanMessage(content=protocol_request_prompt)

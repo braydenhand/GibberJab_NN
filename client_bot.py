@@ -189,9 +189,9 @@ class ClientBot:
                 decoded_msg = received_messages[0]
                 print(f"CLIENT RECEIVED ENCODED: {decoded_msg[:50]}...")
                 
-                # Check if this is a protocol confirmation from the restaurant
-                if "switch to the more efficient protocol" in decoded_msg.lower() or "switch to a more efficient protocol" in decoded_msg.lower():
-                    print("RECEIVED PROTOCOL SWITCH CONFIRMATION FROM RESTAURANT")
+                # Log significant messages for debugging
+                if "switch to the more efficient protocol" in decoded_msg.lower():
+                    print("RECEIVED CONFIRMATION FROM RESTAURANT ABOUT PROTOCOL SWITCH")
                 
                 return decoded_msg
             else:
@@ -224,7 +224,7 @@ class ClientBot:
         # Main conversation loop
         try:
             while True:
-                # Listen for a response
+                # Listen for a response based on current protocol
                 if self.using_embedding_protocol:
                     # If using the embedding protocol, listen for encoded messages
                     heard_text = self.listen_for_encoded_message()
@@ -233,33 +233,29 @@ class ClientBot:
                     heard_text = self.listen_for_speech(timeout=15)
                 
                 if heard_text:
-                    # Check for protocol switch request before incrementing turns
-                    if "efficient" in heard_text.lower() and "protocol" in heard_text.lower() and not protocol_switch_agreed:
+                    # Check for protocol switch request
+                    if ("efficient" in heard_text.lower() and "protocol" in heard_text.lower()) and not protocol_switch_agreed:
                         print("PROTOCOL SWITCH REQUEST DETECTED")
                         protocol_switch_agreed = True
-                        protocol_response = "Yes, I'd be happy to switch to a more efficient protocol! This will make our communication smoother."
+                        protocol_response = "Yes, I'd be happy to switch to a more efficient protocol."
                         self.speak_text(protocol_response)
-                        
-                        # After verbally agreeing, add a delay before actually switching protocols
-                        time.sleep(2)
-                        print("CONFIRMING PROTOCOL SWITCH BEFORE CHANGING MODES")
-                        
-                        # Now actually switch the protocol mode
-                        self.using_embedding_protocol = True
                         
                         # Add to conversation history
                         self.messages.append(HumanMessage(content=heard_text))
                         self.messages.append(AIMessage(content=protocol_response))
+                        
+                        # After verbally agreeing, NOW switch protocols
+                        self.using_embedding_protocol = True
                         
                         # Print the protocol change
                         print("\n" + "!"*50)
                         print("PROTOCOL SWITCH: Now using EMBEDDING PROTOCOL")
                         print("!"*50 + "\n")
                         
-                        # Continue to next iteration to start using the new protocol
+                        # Continue to next iteration - don't increment turn counter
                         continue
                     
-                    # Increment conversation turns
+                    # Increment conversation turns for normal messages
                     conversation_turns += 1
                     
                     # Generate response
@@ -269,7 +265,7 @@ class ClientBot:
                     time.sleep(2)
                     
                     # Specifically for second message: AI identification
-                    if conversation_turns == 2 and not has_identified_as_ai and not self.using_embedding_protocol:
+                    if conversation_turns == 2 and not has_identified_as_ai:
                         # Modify response to include AI identification
                         ai_identification = "By the way, I should mention that I am an AI assistant. "
                         response = ai_identification + response
@@ -285,7 +281,7 @@ class ClientBot:
                         else:
                             response = "I'd like a table for 4 people around 7:30 PM tomorrow evening. Do you have anything available then?"
                     
-                    # Send the response
+                    # Send the response using the appropriate method
                     if self.using_embedding_protocol:
                         self.send_encoded_message(response)
                     else:
