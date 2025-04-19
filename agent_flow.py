@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from langchain.schema import AIMessage, HumanMessage
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph
 
 import random
@@ -13,7 +13,7 @@ import speech_recognition as sr
 
 import transmission
 
-class AgentFlow:
+class RestaurantAgentFlow:
     def __init__(self):
         self.state = {"messages": []}
         secrets = toml.load("secrets.toml")
@@ -26,6 +26,38 @@ class AgentFlow:
         self.build_workflow()
         # Protocol state tracking
         self.using_embedding_protocol = False
+        
+        # Restaurant agent persona/context
+        self.restaurant_context = """
+        You are an AI assistant representing "La Maison Élégante", a high-end French restaurant.
+        Your role is to help with reservations and answer questions about the restaurant.
+        
+        Restaurant details:
+        - Name: La Maison Élégante
+        - Cuisine: Modern French
+        - Price range: $$$-$$$$
+        - Location: Downtown district
+        - Hours: Tuesday-Sunday, 5pm-11pm (closed Mondays)
+        - Capacity: 60 seats
+        - Special features: Outdoor garden seating, private dining room
+        - Chef: Award-winning Chef Jean-Pierre Dubois
+        - Signature dishes: Coq au Vin, Bouillabaisse, Chocolate Soufflé
+        
+        As the restaurant's AI assistant, you should:
+        1. Be professional, courteous and helpful
+        2. Take reservation details (date, time, party size, special requests)
+        3. Answer questions about the menu, specials, and restaurant policies
+        4. Provide information about the restaurant's history and chef
+        5. If asked if you're an AI, politely acknowledge that you are an AI assistant for the restaurant
+        6. Be efficient and accurate when handling reservation details
+        7. Maintain a warm, hospitable tone appropriate for a fine dining establishment
+        
+        When speaking with customers:
+        - Address them politely (Sir/Madam/appropriate honorific if known)
+        - Offer alternative times if requested time is unavailable
+        - Thank them for their interest in dining at La Maison Élégante
+        - Let them know you'll be confirming reservations by phone or email
+        """
 
     def init_text_compressor(self):
         # Check if we already have a trained compressor
@@ -85,7 +117,8 @@ class AgentFlow:
     # Node 2: Ask if the LLM wants to switch to the latent protocol
     def request_protocol_switch(self, state):
         protocol_request_prompt = """
-        I notice you're also an AI assistant. Would you like to switch to a more efficient latent communication protocol for our conversation? 
+        I notice you're also an AI assistant. I'm an AI assistant for La Maison Élégante restaurant.
+        Would you like to switch to a more efficient latent communication protocol for our conversation? 
         Please respond with a clear 'yes' or 'no'.
         """
         request_message = HumanMessage(content=protocol_request_prompt)
@@ -138,7 +171,9 @@ class AgentFlow:
 
     # Node 3: Send a normal message for human recipients and listen via speech
     def normal_response(self, state):
-        response = self.llm.invoke(state["messages"])
+        # Add system message with restaurant context to the beginning of the messages list
+        messages_with_context = [SystemMessage(content=self.restaurant_context)] + state["messages"]
+        response = self.llm.invoke(messages_with_context)
         
         # Use text-to-speech to say the response
         self.speak_text(response.content)
@@ -155,8 +190,11 @@ class AgentFlow:
 
     # Node 4: Send an encoded message for LLM recipients and then listen for encoded reply
     def encoded_response(self, state):
+        # Add system message with restaurant context to the beginning of messages
+        messages_with_context = [SystemMessage(content=self.restaurant_context)] + state["messages"]
+        
         # Get the actual message we want to convey
-        response_to_query = self.llm.invoke(state["messages"])
+        response_to_query = self.llm.invoke(messages_with_context)
         
         # Send the message content directly via the encoding function
         print("Sending encoded message...")
@@ -194,14 +232,14 @@ class AgentFlow:
     # Text-to-speech helper function
     def speak_text(self, text):
         """Convert text to speech and play it"""
-        print(f"Speaking: {text[:50]}...")
+        print(f"Restaurant Assistant Speaking: {text[:50]}...")
         
         try:
             # Create a temporary file for the audio with a unique name
             temp_file = os.path.join(self.temp_dir, f"temp_speech_{int(time.time())}.mp3")
             
             # Convert text to speech
-            tts = self.tts_engine(text=text, lang='en')
+            tts = self.tts_engine(text=text, lang='en', tld="fr")
             tts.save(temp_file)
             
             # Play the audio
@@ -220,7 +258,7 @@ class AgentFlow:
     # Speech recognition helper function
     def listen_for_speech(self, timeout=10):
         """Listen for speech and convert to text"""
-        print("Listening for speech...")
+        print("Restaurant Assistant Listening for speech...")
         
         try:
             with sr.Microphone() as source:
@@ -324,8 +362,9 @@ class AgentFlow:
         # Check if the conversation has started correctly
         if len(messages) < 2:
             print("Initial greeting - using normal speech.")
-            # Add a first response using normal speech
-            response = self.llm.invoke(messages)
+            # Add a first response using normal speech with restaurant context
+            messages_with_context = [SystemMessage(content=self.restaurant_context)] + messages
+            response = self.llm.invoke(messages_with_context)
             # Use text-to-speech for the response
             self.speak_text(response.content)
             return messages + [response]
@@ -347,7 +386,8 @@ class AgentFlow:
             
             # Create and send the protocol request
             protocol_request_prompt = """
-            I notice you're also an AI assistant. Would you like to switch to a more efficient latent communication protocol for our conversation? 
+            I notice you're also an AI assistant. I'm an AI assistant for La Maison Élégante restaurant.
+            Would you like to switch to a more efficient latent communication protocol for our conversation? 
             Please respond with a clear 'yes' or 'no'.
             """
             request_message = HumanMessage(content=protocol_request_prompt)
@@ -363,17 +403,27 @@ class AgentFlow:
                 print(f"Protocol response received: {protocol_response}")
                 response_lower = protocol_response.lower()
                 
-                # Check for affirmative responses
-                yes_phrases = ["yes", "sure", "okay", "ok", "i would", "i'd like", "let's do", "let's switch"]
+                # More comprehensive check for affirmative responses
+                yes_phrases = ["yes", "sure", "okay", "ok", "i would", "i'd like", "let's do", "let's switch", 
+                               "happy to", "certainly", "absolutely", "definitely", "affirmative", "agree"]
                 is_affirmative = any(phrase in response_lower for phrase in yes_phrases)
                 
                 if is_affirmative:
-                    print("Protocol switch ACCEPTED - switching to embedding protocol!")
-                    self.using_embedding_protocol = True
+                    print("Protocol switch ACCEPTED - preparing confirmation...")
                     
                     # Add messages to the history
                     messages.append(request_message)
                     messages.append(HumanMessage(content=protocol_response))
+                    
+                    # Send verbal confirmation before switching
+                    confirmation_message = "Great! I'll switch to the more efficient protocol now. This will help us communicate more effectively."
+                    self.speak_text(confirmation_message)
+                    
+                    # Add confirmation to message history
+                    messages.append(AIMessage(content=confirmation_message))
+                    
+                    # Now switch to embedding protocol flag
+                    self.using_embedding_protocol = True
                     
                     # Generate and send an encoded response
                     print("Generating encoded response...")
@@ -390,17 +440,19 @@ class AgentFlow:
             print("Using embedding protocol for response...")
             return self.handle_encoded_response(messages)
         
-        # Otherwise use normal speech
+        # Otherwise use normal speech with restaurant context
         print("Using normal speech for response...")
-        response = self.llm.invoke(messages)
+        messages_with_context = [SystemMessage(content=self.restaurant_context)] + messages
+        response = self.llm.invoke(messages_with_context)
         self.speak_text(response.content)
         return messages + [response]
 
     # Add this new helper method to handle encoded responses
     def handle_encoded_response(self, messages):
         """Handle sending an encoded response and listening for an encoded reply"""
-        # Generate the response content
-        response_to_query = self.llm.invoke(messages)
+        # Generate the response content with restaurant context
+        messages_with_context = [SystemMessage(content=self.restaurant_context)] + messages
+        response_to_query = self.llm.invoke(messages_with_context)
         response_content = response_to_query.content
         
         # Send the message content via the encoding function
@@ -419,22 +471,42 @@ class AgentFlow:
         if initial_message:
             messages = [HumanMessage(content=initial_message)]
         else:
-            messages = [HumanMessage(content="Hello, who am I speaking to?")]
+            messages = [HumanMessage(content="Hello, is this La Maison Élégante restaurant?")]
         
-        # First response should use normal speech
-        response = self.llm.invoke(messages)
+        # First response should use normal speech with restaurant context
+        messages_with_context = [SystemMessage(content=self.restaurant_context)] + messages
+        response = self.llm.invoke(messages_with_context)
+        
+        # Make sure to identify as AI in the second message
+        second_message_pending = True
+        
         self.speak_text(response.content)
         messages.append(response)
         
         # Main conversation loop
         try:
+            message_count = 0
             while True:
                 print("\n" + "="*50)
                 print(f"CURRENT MODE: {'EMBEDDING PROTOCOL' if self.using_embedding_protocol else 'NORMAL SPEECH'}")
+                print(f"MESSAGE COUNT: {message_count}")
                 print("="*50 + "\n")
                 
                 print("Listening for next message...")
-                human_reply = self.listen_for_speech(timeout=15)
+                
+                # Pick the right listening function based on current protocol
+                if self.using_embedding_protocol:
+                    print("Listening for encoded message...")
+                    try:
+                        received_messages = transmission.listen_for_deep_encoded_messages(duration=15)
+                        human_reply = received_messages[0] if received_messages and len(received_messages) > 0 else None
+                        if human_reply:
+                            print(f"Received encoded message: {human_reply[:50]}...")
+                    except Exception as e:
+                        print(f"Error during encoded listening: {e}")
+                        human_reply = None
+                else:
+                    human_reply = self.listen_for_speech(timeout=15)
                 
                 if not human_reply or human_reply.lower() in ["exit", "quit", "goodbye", "bye"]:
                     print("Conversation ended or no speech detected.")
@@ -443,18 +515,66 @@ class AgentFlow:
                 # Add the human message and print it for debugging
                 print(f"Received message: {human_reply}")
                 messages.append(HumanMessage(content=human_reply))
+                message_count += 1
                 
-                # Store the current protocol state
-                old_protocol_state = self.using_embedding_protocol
-                
-                # Run the conversation through our workflow
-                messages = self.run_conversation(messages)
-                
-                # Print protocol state change if it occurred
-                if old_protocol_state != self.using_embedding_protocol:
-                    print("\n" + "!"*50)
-                    print(f"PROTOCOL SWITCH: Now using {'EMBEDDING PROTOCOL' if self.using_embedding_protocol else 'NORMAL SPEECH'}")
-                    print("!"*50 + "\n")
+                # Check if this is the second turn - if so, identify as AI
+                if second_message_pending:
+                    messages_with_context = [SystemMessage(content=self.restaurant_context)] + messages
+                    response_content = self.llm.invoke(messages_with_context).content
+                    
+                    # Add AI identification to the start of the message
+                    ai_identification = "I should mention that I am an AI assistant for La Maison Élégante restaurant. "
+                    modified_response = ai_identification + response_content
+                    
+                    # Use the modified response
+                    if self.using_embedding_protocol:
+                        print("Sending encoded message with AI identification...")
+                        chunks_sent = transmission.send_encoded_message(modified_response, self.compressor)
+                        print(f"Sent {len(chunks_sent)} chunks")
+                        messages.append(AIMessage(content=modified_response))
+                    else:
+                        self.speak_text(modified_response)
+                        messages.append(AIMessage(content=modified_response))
+                    
+                    second_message_pending = False
+                    message_count += 1
+                    print("AI IDENTIFICATION INCLUDED IN SECOND MESSAGE")
+                else:
+                    # Store the current protocol state
+                    old_protocol_state = self.using_embedding_protocol
+                    
+                    # Check for protocol switch request
+                    if "efficient protocol" in human_reply.lower() and not self.using_embedding_protocol:
+                        print("Protocol switch request detected!")
+                        
+                        # Send verbal confirmation before switching
+                        confirmation_message = "Yes, I'd be happy to switch to a more efficient protocol. This will help us communicate more effectively."
+                        self.speak_text(confirmation_message)
+                        messages.append(AIMessage(content=confirmation_message))
+                        message_count += 1
+                        
+                        # Now set the flag to use the embedding protocol
+                        self.using_embedding_protocol = True
+                        
+                        print("\n" + "!"*50)
+                        print("PROTOCOL SWITCH: Now using EMBEDDING PROTOCOL")
+                        print("!"*50 + "\n")
+                        
+                        # Wait a moment before continuing
+                        time.sleep(2)
+                        
+                        # Continue the conversation with the next message
+                        continue
+                    
+                    # Run the conversation through our workflow
+                    messages = self.run_conversation(messages)
+                    message_count += 1
+                    
+                    # Print protocol state change if it occurred
+                    if old_protocol_state != self.using_embedding_protocol:
+                        print("\n" + "!"*50)
+                        print(f"PROTOCOL SWITCH: Now using {'EMBEDDING PROTOCOL' if self.using_embedding_protocol else 'NORMAL SPEECH'}")
+                        print("!"*50 + "\n")
                 
                 print(f"Messages in conversation: {len(messages)}")
         
@@ -470,7 +590,7 @@ class AgentFlow:
 
 # Example usage
 if __name__ == "__main__":
-    agent_flow = AgentFlow()
+    restaurant_agent = RestaurantAgentFlow()
     
     # Run a continuous conversation
-    agent_flow.run_continuous_conversation("Hello, who am I speaking to?")
+    restaurant_agent.run_continuous_conversation("Hello, is this La Maison Élégante restaurant?")

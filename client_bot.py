@@ -132,7 +132,7 @@ class ClientBot:
         
         # Check if this is a protocol switch request
         if "efficient" in heard_text.lower() and "protocol" in heard_text.lower():
-            self.using_embedding_protocol = True
+            # Don't set the protocol flag yet, just confirm verbally first
             return "Yes, I'd be happy to switch to a more efficient protocol! This will make our communication smoother."
         
         # Add the heard message to our history
@@ -188,6 +188,11 @@ class ClientBot:
             if received_messages and len(received_messages) > 0:
                 decoded_msg = received_messages[0]
                 print(f"CLIENT RECEIVED ENCODED: {decoded_msg[:50]}...")
+                
+                # Check if this is a protocol confirmation from the restaurant
+                if "switch to the more efficient protocol" in decoded_msg.lower() or "switch to a more efficient protocol" in decoded_msg.lower():
+                    print("RECEIVED PROTOCOL SWITCH CONFIRMATION FROM RESTAURANT")
+                
                 return decoded_msg
             else:
                 print("CLIENT: No encoded message received")
@@ -213,6 +218,8 @@ class ClientBot:
         # Track conversation turns to ensure AI identification happens
         conversation_turns = 1
         has_identified_as_ai = False
+        second_message_sent = False
+        protocol_switch_agreed = False
         
         # Main conversation loop
         try:
@@ -226,24 +233,57 @@ class ClientBot:
                     heard_text = self.listen_for_speech(timeout=15)
                 
                 if heard_text:
+                    # Check for protocol switch request before incrementing turns
+                    if "efficient" in heard_text.lower() and "protocol" in heard_text.lower() and not protocol_switch_agreed:
+                        print("PROTOCOL SWITCH REQUEST DETECTED")
+                        protocol_switch_agreed = True
+                        protocol_response = "Yes, I'd be happy to switch to a more efficient protocol! This will make our communication smoother."
+                        self.speak_text(protocol_response)
+                        
+                        # After verbally agreeing, add a delay before actually switching protocols
+                        time.sleep(2)
+                        print("CONFIRMING PROTOCOL SWITCH BEFORE CHANGING MODES")
+                        
+                        # Now actually switch the protocol mode
+                        self.using_embedding_protocol = True
+                        
+                        # Add to conversation history
+                        self.messages.append(HumanMessage(content=heard_text))
+                        self.messages.append(AIMessage(content=protocol_response))
+                        
+                        # Print the protocol change
+                        print("\n" + "!"*50)
+                        print("PROTOCOL SWITCH: Now using EMBEDDING PROTOCOL")
+                        print("!"*50 + "\n")
+                        
+                        # Continue to next iteration to start using the new protocol
+                        continue
+                    
                     # Increment conversation turns
                     conversation_turns += 1
                     
-                    # Generate and speak a response
+                    # Generate response
                     response = self.generate_response(heard_text)
                     
                     # Add a delay between receiving and responding
                     time.sleep(2)
                     
-                    # Announce being an AI after 2-3 turns and not already identified
-                    if conversation_turns >= 3 and not has_identified_as_ai and not self.using_embedding_protocol:
+                    # Specifically for second message: AI identification
+                    if conversation_turns == 2 and not has_identified_as_ai and not self.using_embedding_protocol:
+                        # Modify response to include AI identification
+                        ai_identification = "By the way, I should mention that I am an AI assistant. "
+                        response = ai_identification + response
                         has_identified_as_ai = True
-                        response = "By the way, I should mention that I am an AI assistant. I'm still looking to make that dinner reservation for tomorrow if you have availability."
-                        print("CLIENT: IDENTIFYING SELF AS AI ASSISTANT")
+                        second_message_sent = True
+                        print("CLIENT: IDENTIFYING SELF AS AI ASSISTANT (SECOND MESSAGE)")
                     
                     # Force customer role if needed
                     if "how can i assist you" in heard_text.lower() or "what type of reservation" in heard_text.lower():
-                        response = "I'd like a table for 4 people around 7:30 PM tomorrow evening. Do you have anything available then?"
+                        if not has_identified_as_ai:
+                            response = "I'm an AI assistant. I'd like a table for 4 people around 7:30 PM tomorrow evening. Do you have anything available then?"
+                            has_identified_as_ai = True
+                        else:
+                            response = "I'd like a table for 4 people around 7:30 PM tomorrow evening. Do you have anything available then?"
                     
                     # Send the response
                     if self.using_embedding_protocol:
@@ -251,12 +291,13 @@ class ClientBot:
                     else:
                         self.speak_text(response)
                 else:
-                    # If we couldn't hear anything but we haven't identified as AI yet, do it now
-                    if conversation_turns >= 3 and not has_identified_as_ai and not self.using_embedding_protocol:
+                    # If we couldn't hear anything but we're on our second turn and haven't identified as AI yet
+                    if conversation_turns == 2 and not has_identified_as_ai and not self.using_embedding_protocol:
                         has_identified_as_ai = True
+                        second_message_sent = True
                         ai_identification = "I should mention that I am an AI assistant. I'm looking to make a dinner reservation for tomorrow evening."
                         self.speak_text(ai_identification)
-                        print("CLIENT: FORCING AI IDENTIFICATION DUE TO SILENCE")
+                        print("CLIENT: FORCING AI IDENTIFICATION ON SECOND TURN")
                     else:
                         # Otherwise just wait
                         print("CLIENT: Waiting for input...")
@@ -268,6 +309,8 @@ class ClientBot:
                 print(f"CLIENT MESSAGES: {len(self.messages)}")
                 print(f"CLIENT ROLE: CUSTOMER (seeking reservation)")
                 print(f"AI IDENTIFIED: {has_identified_as_ai}")
+                print(f"SECOND MESSAGE SENT: {second_message_sent}")
+                print(f"PROTOCOL SWITCH AGREED: {protocol_switch_agreed}")
                 print(f"CONVERSATION TURNS: {conversation_turns}")
                 print("-"*50 + "\n")
                 
