@@ -1,7 +1,6 @@
 from langchain_openai import ChatOpenAI
 from langchain.schema import AIMessage, HumanMessage
 from langgraph.graph import StateGraph
-from typing import TypedDict, List, Optional, Literal
 
 import random
 from encoder_model import Encoder 
@@ -282,8 +281,6 @@ class AgentFlow:
         
         # Add nodes
         self.workflow.add_node("detect_llm", self.detect_llm)
-        self.workflow.add_node("detect_protocol_request", self.detect_protocol_request)
-        self.workflow.add_node("respond_to_protocol_request", self.respond_to_protocol_request)
         self.workflow.add_node("protocol_request", self.request_protocol_switch)
         self.workflow.add_node("human_route", self.normal_response)
         self.workflow.add_node("llm_route", self.encoded_response)
@@ -296,28 +293,8 @@ class AgentFlow:
             "detect_llm",
             lambda state: state["detect_llm_result"],
             {
-                "human_route": "detect_protocol_request",
+                "human_route": "human_route",
                 "protocol_request": "protocol_request" 
-            }
-        )
-
-        # Route based on protocol request detection
-        self.workflow.add_conditional_edges(
-            "detect_protocol_request",
-            lambda state: "respond_to_protocol_request" if state["protocol_request_detected"] == "yes" else "human_route",
-            {
-                "respond_to_protocol_request": "respond_to_protocol_request",
-                "human_route": "human_route"
-            }
-        )
-        
-        # Route based on protocol response
-        self.workflow.add_conditional_edges(
-            "respond_to_protocol_request",
-            lambda state: "llm_route" if state["protocol_response"] == "yes" else "human_route",
-            {
-                "llm_route": "llm_route",
-                "human_route": "human_route"
             }
         )
         
