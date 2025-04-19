@@ -510,6 +510,8 @@ class EnhancedNeuralTextCodec(nn.Module):
         loss = loss - 0.01 * entropy
         if self.quantize:
             loss = loss + vq_loss
+        del logits, mean, logvar, vq_loss
+        torch.cuda.empty_cache()
 
         return loss, recon_loss, kl_loss, vq_loss
 
@@ -566,6 +568,8 @@ class EnhancedNeuralTextCodec(nn.Module):
                 if len(byte_data) > 0:
                     preview = list(byte_data[:min(10, len(byte_data))])
                     print(f"First few bytes: {preview}")
+                del logits, mean, logvar, vq_loss, encoding_indices
+                torch.cuda.empty_cache()
 
                 return bytes(byte_data)
             else:
@@ -576,6 +580,9 @@ class EnhancedNeuralTextCodec(nn.Module):
                 z_scaled = np.clip((z_np + 3) * 42.5, 0, 255).astype(np.uint8)
 
                 print(f"Encoded {len(z_scaled)} float values to bytes")
+                del logits, mean, logvar, vq_loss, encoding_indices
+                torch.cuda.empty_cache()
+
                 return bytes(z_scaled)
 
     def decode(self, byte_data):
@@ -662,6 +669,8 @@ class EnhancedNeuralTextCodec(nn.Module):
         # Convert token IDs back to text
         decoded_text = self.tokenizer.decode(token_ids)
         print(f"Raw decoded text (before cleanup): {repr(decoded_text)}")
+        del logits, mean, logvar, vq_loss, encoding_indices
+        torch.cuda.empty_cache()
 
         return decoded_text
 
@@ -799,6 +808,8 @@ class EnhancedNeuralTextCodec(nn.Module):
                     'loss': avg_loss,
                 }, checkpoint_path)
                 print(f"Checkpoint saved to {checkpoint_path}")
+                del self.encoder, self.decoder, self.vector_quantizer
+                torch.cuda.empty_cache()
 
         return self
 
@@ -1081,12 +1092,18 @@ def train_enhanced_neural_codec(corpus_path=None, output_path="enhanced_neural_c
         checkpoint_every=1
     )
 
-    # Save model and tokenizer
+        # Save model and tokenizer
     os.makedirs(output_path, exist_ok=True)
     model.save(output_path)
     tokenizer.save(os.path.join(output_path, "tokenizer"))
 
     print(f"Saved enhanced neural codec to {output_path}")
+
+    # Clean up
+    del train_dataset
+    del val_dataset
+    del corpus
+    torch.cuda.empty_cache()
 
     return model, 0
 
@@ -1160,8 +1177,11 @@ def send_neural_encoded_message(message, codec, protocol_id=6):
 
     except Exception as e:
         print(f"Error: {e}")
-
+        del encoded
+    del decoded
+    torch.cuda.empty_cache()
     return encoded
+
 
 
 if __name__ == "__main__":
@@ -1233,3 +1253,10 @@ if __name__ == "__main__":
     # Test with the long message
     print("\n\n===== TESTING WITH LONG MESSAGE =====")
     send_neural_encoded_message(long_message, model)
+        # Clean up large objects
+    del model
+    if 'tokenizer' in locals():
+        del tokenizer
+    if 'corpus' in locals():
+        del corpus
+    torch.cuda.empty_cache()
