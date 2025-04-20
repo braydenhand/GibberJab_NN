@@ -8,7 +8,8 @@ import pygame
 import random
 from gtts import gTTS
 import transmission
-
+from google.cloud import speech
+import io
 class ClientBot:
     def __init__(self):
         # Load API key
@@ -70,6 +71,10 @@ class ClientBot:
         self.temp_dir = os.path.join(os.getcwd(), "temp_audio_client")
         if not os.path.exists(self.temp_dir):
             os.makedirs(self.temp_dir)
+        
+        # Set up Google Cloud credentials
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "ecstatic-galaxy-457400-g3-93d1873b35ec.json"
+        self.speech_client = speech.SpeechClient()
     
     def speak_text(self, text):
         """Convert text to speech and play it"""
@@ -94,15 +99,17 @@ class ClientBot:
         except Exception as e:
             print(f"Error in client text-to-speech: {e}")
     
-    def listen_for_speech(self, timeout=10):
-        """Listen for speech from the other bot"""
+    def listen_for_speech(self, timeout=20):
+        """Listen for speech from the other bot using Google Cloud Speech"""
         print("CLIENT LISTENING...")
         
         try:
             with sr.Microphone() as source:
                 # Adjust for ambient noise
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
-                
+                self.recognizer.adjust_for_ambient_noise(source, duration=1)                
+                # Increase sensitivity and patience
+                self.recognizer.energy_threshold = 300  # Default is 300, lower is more sensitive
+                self.recognizer.dynamic_energy_threshold = False
                 print(f"CLIENT LISTENING (timeout: {timeout}s)...")
                 
                 try:
@@ -111,12 +118,41 @@ class ClientBot:
                     audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=20)
                     
                     try:
-                        text = self.recognizer.recognize_google(audio)
-                        print(f"CLIENT HEARD: {text}")
-                        return text
-                    except sr.UnknownValueError:
-                        print("CLIENT: Could not understand audio")
-                        return None
+                        # Convert audio to format needed by Google Cloud
+                        audio_content = audio.get_wav_data()
+                        
+                        # Create the recognition config
+                        config = speech.RecognitionConfig(
+                            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                            sample_rate_hertz=44100,
+                            language_code="en-US",
+                            enable_automatic_punctuation=True,
+                        )
+                        
+                        # Create recognition audio object
+                        audio_obj = speech.RecognitionAudio(content=audio_content)
+                        
+                        # Perform the speech recognition
+                        response = self.speech_client.recognize(config=config, audio=audio_obj)
+                        
+                        # Process the response
+                        if response.results:
+                            text = response.results[0].alternatives[0].transcript
+                            print(f"CLIENT HEARD: {text}")
+                            return text
+                        else:
+                            print("CLIENT: Could not understand audio")
+                            return None
+                    except Exception as e:
+                        print(f"Error in Cloud Speech recognition: {e}")
+                        # Fall back to regular Google recognition if Cloud fails
+                        try:
+                            text = self.recognizer.recognize_google(audio)
+                            print(f"CLIENT HEARD (fallback): {text}")
+                            return text
+                        except sr.UnknownValueError:
+                            print("CLIENT: Could not understand audio")
+                            return None
                 except sr.WaitTimeoutError:
                     print("CLIENT: No speech detected within timeout.")
                     return None
@@ -230,7 +266,7 @@ class ClientBot:
                     heard_text = self.listen_for_encoded_message()
                 else:
                     # Otherwise listen for speech
-                    heard_text = self.listen_for_speech(timeout=15)
+                    heard_text = self.listen_for_speech(timeout=20)
                 
                 if heard_text:
                     # Check for protocol switch request

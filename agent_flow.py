@@ -74,6 +74,13 @@ class RestaurantAgentFlow:
         if not os.path.exists(self.temp_dir):
             os.makedirs(self.temp_dir)
         
+        # Set up Google Cloud credentials
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "ecstatic-galaxy-457400-g3-93d1873b35ec.json"
+        
+        # Import Google Cloud Speech library
+        from google.cloud import speech
+        self.speech_client = speech.SpeechClient()
+        
         from gtts import gTTS
         self.tts_engine = gTTS
 
@@ -250,7 +257,7 @@ class RestaurantAgentFlow:
 
     # Speech recognition helper function
     def listen_for_speech(self, timeout=10):
-        """Listen for speech and convert to text"""
+        """Listen for speech and convert to text using Google Cloud Speech-to-Text"""
         print("Restaurant Assistant Listening for speech...")
         
         try:
@@ -274,29 +281,70 @@ class RestaurantAgentFlow:
                 try:
                     audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_time_limit)
                     
-                    # Try multiple recognition services in case one fails
                     try:
-                        text = self.recognizer.recognize_google(audio)
-                        print(f"Heard: {text}")
-                        return text
-                    except sr.UnknownValueError:
-                        # Try with a different service if Google fails
-                        try:
-                            text = self.recognizer.recognize_sphinx(audio)
-                            print(f"Heard (via Sphinx): {text}")
-                            return text
-                        except:
-                            pass
+                        # Convert audio to format needed by Google Cloud
+                        audio_content = audio.get_wav_data()
                         
-                        print("Could not understand audio")
-                        return None
+                        # Import Google Cloud Speech classes if not already imported
+                        from google.cloud import speech
+                        
+                        # Create the recognition config with correct sample rate
+                        config = speech.RecognitionConfig(
+                            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+                            sample_rate_hertz=44100,  # Match the WAV header sample rate
+                            language_code="en-US",
+                            enable_automatic_punctuation=True,
+                            # Add these for better results
+                            use_enhanced=True,
+                            model="latest_long",
+                        )
+                        
+                        # Create recognition audio object
+                        audio_obj = speech.RecognitionAudio(content=audio_content)
+                        
+                        # Perform the speech recognition
+                        response = self.speech_client.recognize(config=config, audio=audio_obj)
+                        
+                        # Process the response
+                        if response.results:
+                            text = response.results[0].alternatives[0].transcript
+                            print(f"Heard (via Google Cloud): {text}")
+                            return text
+                        else:
+                            print("Could not understand audio")
+                            # Fall back to regular Google recognition if Cloud fails
+                            try:
+                                text = self.recognizer.recognize_google(audio)
+                                print(f"Heard (via free Google API fallback): {text}")
+                                return text
+                            except sr.UnknownValueError:
+                                # Try with a different service as a last resort
+                                try:
+                                    text = self.recognizer.recognize_sphinx(audio)
+                                    print(f"Heard (via Sphinx fallback): {text}")
+                                    return text
+                                except:
+                                    pass
+                                
+                                print("All recognition methods failed")
+                                return None
+                    except Exception as e:
+                        print(f"Error in Google Cloud Speech recognition: {e}")
+                        # Fall back to regular Google recognition if Cloud fails
+                        try:
+                            text = self.recognizer.recognize_google(audio)
+                            print(f"Heard (via free Google API fallback): {text}")
+                            return text
+                        except sr.UnknownValueError:
+                            print("Could not understand audio")
+                            return None
                 except sr.WaitTimeoutError:
                     print("No speech detected within timeout.")
                     return None
         except Exception as e:
             print(f"Error in speech recognition: {e}")
             # If we hit an error with the microphone, return a default response for testing
-            return "I am an AI assistant. Yes, I'd like to switch to the efficient protocol."
+            return "I am an AI assistant. Yes, I'd like to switch to the efficient protocol"
 
     # Build the LangGraph workflow
     def build_workflow(self):
@@ -408,7 +456,7 @@ class RestaurantAgentFlow:
                     messages.append(HumanMessage(content=protocol_response))
                     
                     # Send verbal confirmation before switching
-                    confirmation_message = "Great! I'll switch to the more efficient protocol now. This will help us communicate more effectively."
+                    confirmation_message = "Great! Switching now"
                     self.speak_text(confirmation_message)
                     
                     # Add confirmation to message history

@@ -3,3 +3,4 @@ checkpoints/
 enhanced_neural_codec/
 pytorch_neural_codec/
 ec2.pem
+temp_speech*
