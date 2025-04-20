@@ -5,3 +5,7 @@ tiktoken
 langchain_community
 toml
 langchain_openai
+gttr
+google-cloud-speech
+ggwave
+SoundRecognition

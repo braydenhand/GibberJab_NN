@@ -207,7 +207,7 @@ class RestaurantAgentFlow:
         # Listen for a response
         print("Listening for encoded reply...")
         try:
-            received_messages = transmission.listen_for_deep_encoded_messages(duration=30)  # 30 second timeout
+            received_messages = transmission.listen_for_deep_encoded_messages(duration=60)  # 30 second timeout
         except Exception as e:
             print(f"Error during listening: {e}")
             received_messages = []
@@ -538,7 +538,7 @@ class RestaurantAgentFlow:
                 if self.using_embedding_protocol:
                     print("Listening for encoded message...")
                     try:
-                        received_messages = transmission.listen_for_deep_encoded_messages(duration=15)
+                        received_messages = transmission.listen_for_deep_encoded_messages(duration=60)
                         human_reply = received_messages[0] if received_messages and len(received_messages) > 0 else None
                         if human_reply:
                             print(f"Received encoded message: {human_reply[:50]}...")

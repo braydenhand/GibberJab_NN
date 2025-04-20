@@ -302,7 +302,6 @@ def send_encoded_message(message, compressor=None, protocol_id=6, max_bytes=125)
         compressor: Optional TextCompressor instance (will create or load one if None)
         protocol_id: GGWave protocol ID (higher = better for longer messages)
         max_bytes: Maximum size for a single transmission chunk in bytes
-    returns chunks of message sent. 
     """
     # Use provided compressor or load a pre-trained one
     if compressor is None:
@@ -425,7 +424,7 @@ def _send_single_chunk(message, compressor, protocol_id=6):
         
         # Encode the message with ggwave using the specified protocol
         # protocol_id controls type of transmission (higher values usually support longer messages)
-        waveform = ggwave.encode(compressed_message, instance)
+        waveform = ggwave.encode(compressed_message, instance, protocol_id)
         
         # Convert waveform to numpy array for PyAudio
         # The waveform from ggwave is a bytes object containing 32-bit float samples
@@ -649,10 +648,11 @@ if __name__ == "__main__":
         # Use the sender with:
         # 1. Higher protocol_id (6) for longer message support
         # 2. Smaller max_message_size (200) to ensure chunks are small enough
-        send_encoded_message(example_message, compressor, protocol_id=1, max_bytes=125)
+        #
+        # send_encoded_message(example_message, compressor, protocol_id=1, max_bytes=125)
         
         # To listen for messages, uncomment:
-        listen_for_deep_encoded_messages(duration=60, protocol_id=1)
+        print(listen_for_deep_encoded_messages(duration=60, protocol_id=6))
         
     except Exception as e:
         print(f"Error: {e}")
