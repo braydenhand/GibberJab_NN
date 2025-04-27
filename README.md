@@ -150,7 +150,7 @@ GibberJab_NN/
 │
 ├─ t2.py  test.py  test3.py  test4.py   # assorted scratch tests
 └─ ecstatic-galaxy-457400-g3-93d1…png   # (screenshot asset)
-
+```
 ---
 
 ## Performance & Benchmarks
