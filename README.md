@@ -2,6 +2,9 @@
 # GibberJab NN &nbsp;🔊  
 _A neural-network–powered latent-embedding “audio language” for machine-to-machine dialogue_
 
+![AICommunication](AICommunication.png)
+
+
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
