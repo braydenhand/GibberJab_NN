@@ -2,7 +2,7 @@
 # GibberJab NN &nbsp;🔊  
 _A neural-network–powered latent-embedding “audio language” for machine-to-machine dialogue_
 
-![AICommunication](AICommunication.png)
+
 
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
@@ -10,7 +10,7 @@ _A neural-network–powered latent-embedding “audio language” for machine-to
 
 GibberJab NN compresses natural-language text to ultra-compact byte strings, then transmits them as **frequency-shift-keyed (FSK) audio tones** via the open-source GGWave library.  
 The current release implements a dictionary-based *TextCompressor*, adaptive chunking, and end-to-end acoustic transport with >95 % message recovery in typical indoor environments.
-
+![AICommunication](AICommunication.png)
 ---
 
 ## Table&nbsp;of&nbsp;Contents
